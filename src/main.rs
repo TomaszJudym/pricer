@@ -48,7 +48,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config: Config = ron::from_str(&std::fs::read_to_string("config.ron")?)?;
     let key = std::env::var("GGDEALS_KEY")?;
     let tg_token = std::env::var("TELEGRAM_BOT_TOKEN")?;
-    let tg_chat_id = std::env::var("TELEGRAM_ADMIN_ID")?;
+    let tg_chat_id = std::env::var("TELEGRAM_CHAT_ID")
+        .or_else(|_| std::env::var("TELEGRAM_ADMIN_ID"))?;
+    let dry_run = std::env::var("DRY_RUN").map(|v| v == "true").unwrap_or(false);
 
     let ids: Vec<String> = config.games.iter().map(|g| g.id.to_string()).collect();
     let thresholds: HashMap<u64, (&str, f64)> = config.games.iter()
@@ -94,8 +96,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if !alerts.is_empty() {
         let msg = format!("Price alerts:\n\n{}", alerts.join("\n\n"));
-        send_telegram(&client, &tg_token, &tg_chat_id, &msg).await?;
-        println!("-> Telegram notification sent ({} game(s))", alerts.len());
+        if dry_run {
+            println!("-> DRY RUN — would send Telegram ({} game(s))", alerts.len());
+        } else {
+            send_telegram(&client, &tg_token, &tg_chat_id, &msg).await?;
+            println!("-> Telegram notification sent ({} game(s))", alerts.len());
+        }
     }
 
     Ok(())
