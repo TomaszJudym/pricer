@@ -4,5 +4,6 @@
         (name: "ZERO PARADES: For Dead Spies", id: 2863680, threshold_pln: 40.0),
         (name: "Banquet for Fools",            id: 3172700, threshold_pln: 40.0),
         (name: "Wanderstop",                   id: 1299460, threshold_pln: 35.0),
+        (name: "Escape from Duckov",           id: 3167020, threshold_pln: 30.0),
     ]
 )
