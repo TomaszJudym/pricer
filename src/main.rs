@@ -46,6 +46,10 @@ async fn send_telegram(client: &reqwest::Client, token: &str, chat_id: &str, tex
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config: Config = ron::from_str(&std::fs::read_to_string("config.ron")?)?;
+    let prev_prices: HashMap<u64, f64> = std::fs::read_to_string("prices.json")
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
     let key = std::env::var("GGDEALS_KEY")?;
     let tg_token = std::env::var("TELEGRAM_BOT_TOKEN")?;
     let tg_chat_id = std::env::var("TELEGRAM_CHAT_ID")
@@ -66,6 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let resp: ApiResponse = client.get(&url).send().await?.json().await?;
 
     let mut alerts: Vec<String> = Vec::new();
+    let mut new_prices: HashMap<u64, f64> = prev_prices.clone();
 
     for (id_str, game) in &resp.data {
         let id: u64 = id_str.parse()?;
@@ -82,9 +87,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("[{id}] {name} | lowest: {price_str} | {}", g.url);
 
                 if let Some(price) = best_price {
-                    if price < threshold {
+                    // Only alert on a meaningful drop vs. yesterday's price (>= 2 PLN)
+                    // to avoid spamming on marginal day-to-day changes. With no
+                    // recorded history we can't verify the drop, so we let it through.
+                    let dropped_enough = prev_prices.get(&id).is_none_or(|&y| price <= y - 2.0);
+                    if price < threshold && dropped_enough {
                         alerts.push(format!("{name}\n{price_str}\n{}", g.url));
                     }
+                    new_prices.insert(id, price);
                 }
             }
             None => {
@@ -93,6 +103,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
+
+    std::fs::write("prices.json", serde_json::to_string_pretty(&new_prices)?)?;
 
     if !alerts.is_empty() {
         let msg = format!("Price alerts:\n\n{}", alerts.join("\n\n"));
